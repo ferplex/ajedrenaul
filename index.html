@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber Nautlilus lab perros - Local & AI Ready</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #8b5cf6, #22c55e);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+    .status {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+    .status span { color: #22c55e; }
+    
+    /* El contenedor del tablero */
+    .chess-container {
+      background: rgba(30, 41, 59, 0.7);
+      padding: 15px;
+      border-radius: 20px;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 65px);
+      grid-template-rows: repeat(8, 65px);
+      border: 4px solid #1e1b4b;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .square {
+      width: 65px;
+      height: 65px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s ease;
+    }
+    /* Estilo Cyberpunk para las casillas */
+    .light { background-color: #e2e8f0; color: #0f172a; }
+    .dark { background-color: #475569; color: #f8fafc; }
+    
+    .square.selected {
+      background-color: #8b5cf6 !important;
+      color: white !important;
+    }
+    .square.hint {
+      background-color: rgba(34, 197, 94, 0.4) !important;
+    }
+    
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      gap: 15px;
+    }
+    .btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #8b5cf6, #6366f1);
+      border: none;
+      color: white;
+      font-weight: 800;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn.reset { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+
+    @media (max-width: 600px) {
+      .board {
+        grid-template-columns: repeat(8, 40px);
+        grid-template-rows: repeat(8, 40px);
+      }
+      .square { width: 40px; height: 40px; font-size: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Cyber Ajedres Nautiluslab Local</h1>
+  <div class="status" id="status">Turno de las <span>Blancas</span></div>
+
+  <div class="chess-container">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn reset" onclick="resetGame()">Reiniciar Juego</button>
+    <button class="btn" onclick="toggleAI()">Modo: Solo Humanos</button>
+  </div>
+
+  <script>
+    // Representación de las piezas en Unicode
+    const pieces = {
+      'R': '♜', 'N': '♞', 'B': '♝', 'Q': '♛', 'K': '♚', 'P': '♟',
+      'r': '♖', 'n': '♘', 'b': '♗', 'q': '♕', 'k': '♔', 'p': '♙',
+      '': ''
+    };
+
+    // Tablero inicial (Mayúsculas negras, minúsculas blancas)
+    let initialBoard = [
+      ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+      ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+      ['', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', ''],
+      ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+      ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r']
+    ];
+
+    let boardState = JSON.parse(JSON.stringify(initialBoard));
+    let turn = 'white'; // 'white' o 'black'
+    let selectedSquare = null;
+    let aiMode = false;
+
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+
+    function createBoard() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const square = document.createElement('div');
+          square.className = `square ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
+          square.dataset.row = r;
+          square.dataset.col = c;
+          
+          const piece = boardState[r][c];
+          square.textContent = pieces[piece] || '';
+          
+          square.onclick = () => handleSquareClick(r, c);
+          boardEl.appendChild(square);
+        }
+      }
+    }
+
+    function handleSquareClick(r, c) {
+      if (aiMode && turn === 'black') return; // Esperando a la IA
+
+      const piece = boardState[r][c];
+      const isWhitePiece = piece && piece === piece.toLowerCase();
+      const isBlackPiece = piece && piece === piece.toUpperCase();
+
+      // Si ya hay una pieza seleccionada e intenta mover
+      if (selectedSquare) {
+        const [sr, sc] = selectedSquare;
+        if (sr === r && sc === c) {
+          // Deseleccionar
+          removeHighlights();
+          selectedSquare = null;
+          return;
+        }
+
+        // Ejecutar movimiento (Falta validación completa de reglas de ajedrez complejas, esto es libre movimiento por ahora)
+        boardState[r][c] = boardState[sr][sc];
+        boardState[sr][sc] = '';
+        selectedSquare = null;
+        removeHighlights();
+        changeTurn();
+        createBoard();
+        
+        if (aiMode && turn === 'black') {
+          setTimeout(makeAIMove, 600);
+        }
+        return;
+      }
+
+      // Seleccionar pieza según el turno
+      if ((turn === 'white' && isWhitePiece) || (turn === 'black' && isBlackPiece)) {
+        removeHighlights();
+        selectedSquare = [r, c];
+        getSquareEl(r, c).classList.add('selected');
+      }
+    }
+
+    function changeTurn() {
+      turn = turn === 'white' ? 'black' : 'white';
+      statusEl.innerHTML = `Turno de las <span>${turn === 'white' ? 'Blancas' : 'Negras'}</span>`;
+    }
+
+    function removeHighlights() {
+      document.querySelectorAll('.square').forEach(s => s.classList.remove('selected', 'hint'));
+    }
+
+    function getSquareEl(r, c) {
+      return boardEl.children[r * 8 + c];
+    }
+
+    function resetGame() {
+      boardState = JSON.parse(JSON.stringify(initialBoard));
+      turn = 'white';
+      selectedSquare = null;
+      statusEl.innerHTML = `Turno de las <span>Blancas</span>`;
+      createBoard();
+    }
+
+    function toggleAI() {
+      aiMode = !aiMode;
+      event.target.textContent = aiMode ? "Modo: Vs IA (Local Ready)" : "Modo: Solo Humanos";
+      resetGame();
+    }
+
+    // Lógica básica de IA (Movimientos aleatorios por ahora para jugar offline)
+    function makeAIMove() {
+      let moves = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = boardState[r][c];
+          if (piece && piece === piece.toUpperCase()) { // Pieza negra
+            // Buscar casillas vacías o con piezas blancas alrededor como movimiento básico
+            for (let dr = -1; dr <= 1; dr++) {
+              for (let dc = -1; dc <= 1; dc++) {
+                let nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && (dr !== 0 || dc !== 0)) {
+                  let target = boardState[nr][nc];
+                  if (!target || target === target.toLowerCase()) {
+                    moves.push({from: [r, c], to: [nr, nc]});
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (moves.length > 0) {
+        // Elige un movimiento al azar
+        const move = moves[Math.floor(Math.random() * moves.length)];
+        const [fr, fc] = move.from;
+        const [tr, tc] = move.to;
+        
+        boardState[tr][tc] = boardState[fr][fc];
+        boardState[fr][fc] = '';
+        changeTurn();
+        createBoard();
+      }
+    }
+
+    /* 
+      💡 TIP PARA NAUTILUS LAB (INTEGRACIÓN CON OLLAMA):
+      Para conectar una verdadera IA local sin internet, puedes hacer un fetch a tu endpoint local:
+      
+      async function getOllamaMove(boardFEN) {
+        const response = await fetch('http://localhost:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gemma2',
+            prompt: `Eres un motor de ajedrez. El estado actual es ${boardFEN}. Responde solo con el mejor movimiento en formato clásico (ej. e2e4).`
+          })
+        });
+        const data = await response.json();
+        // Traduces la respuesta y ejecutas el movimiento en el tablero.
+      }
+    */
+
+    createBoard();
+  </script>
+</body>
+</html>
